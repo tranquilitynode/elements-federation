@@ -1,6 +1,6 @@
 # Protocol Demo
 
-A demonstration of protocols used by the Ocean network, including federated signing and asset issuance.
+A demonstration of protocols used by the Elements network, including federated signing and asset issuance.
 
 ## Instructions
 
