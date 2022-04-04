@@ -2,20 +2,20 @@
 import threading
 import time
 import random
-from federation.connectivity import getoceand
+from federation.connectivity import getelementsd
 
 ISSUANCE = 10000000
 REISSUANCE = 0
 
 class AssetIssuance(threading.Thread):
-    def __init__(self, ocean_conf, interval):
+    def __init__(self, elementsd_conf, interval):
         threading.Thread.__init__(self)
         self.stop_event = threading.Event()
         self.daemon = True
-        self.ocean_conf = ocean_conf
-        self.ocean = getoceand(ocean_conf)
+        self.elementsd_conf = elementsd_conf
+        self.elementsd = getelementsd(elementsd_conf)
         self.interval = interval
-        issue = self.ocean.issueasset(ISSUANCE, REISSUANCE, False)
+        issue = self.elementsd.issueasset(ISSUANCE, REISSUANCE, False)
         self.asset = issue["asset"]
         time.sleep(5)
 
@@ -24,10 +24,10 @@ class AssetIssuance(threading.Thread):
 
     def run(self):
         while not self.stop_event.is_set():
-            self.ocean = getoceand(self.ocean_conf)
-            addr = self.ocean.getnewaddress()
+            self.elementsd = getelementsd(self.elementsd_conf)
+            addr = self.elementsd.getnewaddress()
             time.sleep(2)
-            self.ocean.sendtoaddress(addr, random.randint(1,10), "", "", False, self.asset)
+            self.elementsd.sendtoaddress(addr, random.randint(1,10), "", "", False, self.asset)
             time.sleep(2)
             time.sleep(self.interval)
 

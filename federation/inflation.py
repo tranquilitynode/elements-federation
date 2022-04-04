@@ -5,7 +5,7 @@ import sys
 YEAR = 60*60*24*365
 
 class Inflation():
-    def __init__(self, total, my_id, ocean, interval, in_rate, in_period, in_address, script, key):
+    def __init__(self, total, my_id, elementsd, interval, in_rate, in_period, in_address, script, key):
         self.logger = logging.getLogger(self.__class__.__name__)
         self.total = total
         self.my_id = my_id
@@ -20,14 +20,14 @@ class Inflation():
         self.riprivk = []
         self.riprivk.append(key)
         try:
-            p2sh = ocean.decodescript(script)
+            p2sh = elementsd.decodescript(script)
         except Exception as e:
             self.logger.error("{}\nFailed to decode reissuance script".format(e))
             sys.exit(1)
         self.p2sh = p2sh["p2sh"]
         self.nsigs = p2sh["reqSigs"]
 
-        validate = ocean.validateaddress(self.p2sh)
+        validate = elementsd.validateaddress(self.p2sh)
         have_va_addr = bool(validate["ismine"])
         watch_only = bool(validate["iswatchonly"])
         have_va_prvkey = have_va_addr and not watch_only
@@ -36,7 +36,7 @@ class Inflation():
 
         if have_va_prvkey == False:
             try:
-                ocean.importprivkey(key,"privkey",rescan_needed)
+                elementsd.importprivkey(key,"privkey",rescan_needed)
             except Exception as e:
                 self.logger.error("{}\nFailed to import reissuance private key".format(e))
                 sys.exit(1)
@@ -45,24 +45,24 @@ class Inflation():
             rescan_needed=False
 
         #Check if we still need to import the address given that we have just imported the private key
-        validate = ocean.validateaddress(self.p2sh)
+        validate = elementsd.validateaddress(self.p2sh)
         have_va_addr = bool(validate["ismine"])
         if have_va_addr == False:
-            ocean.importaddress(self.p2sh,"reissuance",rescan_needed)
-            validate = ocean.validateaddress(self.p2sh)
+            elementsd.importaddress(self.p2sh,"reissuance",rescan_needed)
+            validate = elementsd.validateaddress(self.p2sh)
 
         self.scriptpk = validate["scriptPubKey"]
 
-    def send_txs(self, ocean, height, block, sigs):
+    def send_txs(self, elementsd, height, block, sigs):
         txsigs = [None] * self.total
         for sig in sigs:
             if "id" in sig and "txsigs" in sig:
                 txsigs[sig["id"]] = sig["txsigs"]
         # add sigs for this node
-        mysigs = self.get_tx_signatures(ocean, block["txs"], height, False)
+        mysigs = self.get_tx_signatures(elementsd, block["txs"], height, False)
         txsigs[self.my_id] = mysigs
         signed_txs = self.combine_tx_signatures(block["txs"], txsigs)
-        sent = self.send_reissuance_txs(ocean, signed_txs)
+        sent = self.send_reissuance_txs(elementsd, signed_txs)
         if sent == None:
             self.logger.warning("could not send reissuance transactions. node "+str(self.my_id))
             return False
@@ -75,11 +75,11 @@ class Inflation():
             return True
         return False
 
-    def create_txs(self, ocean, height):
+    def create_txs(self, elementsd, height):
         self.logger.info("node: {} - inflationconf: {}".format(str(self.my_id), str(self.inconf)))
         txs = None
         if height % self.period == 0:
-            txs = self.get_reissuance_txs(ocean, height)
+            txs = self.get_reissuance_txs(elementsd, height)
             if txs == None:
                 self.logger.warning("could not create reissuance txs")
                 return None
@@ -90,13 +90,13 @@ class Inflation():
                 self.inconf = 0
         # If not reissuance step, in first 1/2 of inflation period and issuance not confirmed, then verify issuance
         elif self.inconf == 0 and height % self.period > 2 and height % self.period < self.period/2:
-            riconf = self.confirm_reissuance_txs(ocean, height)
+            riconf = self.confirm_reissuance_txs(elementsd, height)
             self.logger.info("confirmed: "+str(riconf)+" node "+str(self.my_id))
             if riconf:
                 self.inconf = 1
             else:
                 #attempt reissuance again
-                txs = self.get_reissuance_txs(ocean, height)
+                txs = self.get_reissuance_txs(elementsd, height)
                 self.inconf = 0
                 if txs == None:
                     self.logger.warning("could not create reissuance txs on retry")
@@ -106,39 +106,39 @@ class Inflation():
             raise Exception("FATAL: could not issue inflation transactions")
         return txs
 
-    def get_tx_sigs(self, ocean, height, new_block):
+    def get_tx_sigs(self, elementsd, height, new_block):
         self.logger.info("node: {} - inflationconf: {}".format(str(self.my_id), str(self.inconf)))
         rtxs = []
         txsigs = None
         if height % self.period == 0:
-            rtxs = self.get_reissuance_txs(ocean, height)
+            rtxs = self.get_reissuance_txs(elementsd, height)
             if rtxs == None:
                 self.logger.warning("could not get reissuance txs")
             self.inconf = 1 if rtxs != None and len(rtxs) == 0 else 0
         if self.inconf == 0 and "txs" in new_block:
             if height % self.period == 0:
                 if rtxs == new_block["txs"]:
-                    txsigs = self.get_tx_signatures(ocean, new_block["txs"], height, False)
+                    txsigs = self.get_tx_signatures(elementsd, new_block["txs"], height, False)
                 if txsigs == None:
                     self.logger.warning("could not sign reissuance txs on specified period block")
             elif height % self.period < self.period/2:
-                txsigs = self.get_tx_signatures(ocean, new_block["txs"], height, True)
+                txsigs = self.get_tx_signatures(elementsd, new_block["txs"], height, True)
                 if txsigs != None:
                     self.logger.warning("reissuance txs signed with delay of "+str(height % self.period)+" blocks")
         return txsigs
 
-    def get_reissuance_txs(self, ocean, height):
+    def get_reissuance_txs(self, elementsd, height):
         #check that the reissuance address has been imported, and if not import
-        if ocean.getaccount(self.p2sh) != "reissuance":
-            ocean.importaddress(self.p2sh,"reissuance")
+        if elementsd.getaccount(self.p2sh) != "reissuance":
+            elementsd.importaddress(self.p2sh,"reissuance")
         try:
             token_addr = self.p2sh
             raw_transactions = []
             #retrieve the token report for re-issuing
-            utxorep = ocean.getutxoassetinfo()
+            utxorep = elementsd.getutxoassetinfo()
             #get the reissuance tokens from wallet
-            unspentlist = ocean.listunspent()
-            frzhist = ocean.getfreezehistory() # get freeze history
+            unspentlist = elementsd.listunspent()
+            frzhist = elementsd.getfreezehistory() # get freeze history
             for unspent in unspentlist:
                 #re-issuance and policy tokens have issued amount of 10000 as a convention
                 if "address" in unspent:
@@ -167,7 +167,7 @@ class Inflation():
                         self.logger.info("Reissue asset "+asset+" by "+str(round(total_reissue,8)))
                         if total_reissue == 0.0:
                             continue
-                        tx = ocean.createrawreissuance(self.address,str("%.8f" % round(total_reissue,8)),token_addr,str(unspent["amount"]),unspent["txid"],str(unspent["vout"]),entropy)
+                        tx = elementsd.createrawreissuance(self.address,str("%.8f" % round(total_reissue,8)),token_addr,str(unspent["amount"]),unspent["txid"],str(unspent["vout"]),entropy)
                         tx["token"] = unspent["asset"]
                         tx["txid"] = unspent["txid"]
                         tx["vout"] = unspent["vout"]
@@ -177,13 +177,13 @@ class Inflation():
             self.logger.warning("failed reissuance tx generation: {}".format(e))
             return None
 
-    def confirm_reissuance_txs(self, ocean, height):
+    def confirm_reissuance_txs(self, elementsd, height):
         isFatal = False
         try:
             token_addr = self.p2sh
-            utxorep = ocean.getutxoassetinfo()
+            utxorep = elementsd.getutxoassetinfo()
             #get the reissuance tokens from wallet
-            unspentlist = ocean.listunspent()
+            unspentlist = elementsd.listunspent()
             numissue = 0
             numnew = 0
             for unspent in unspentlist:
@@ -227,7 +227,7 @@ class Inflation():
             self.logger.warning("failed reissuance tx checking: {}".format(e))
             return False
 
-    def get_tx_signatures(self, ocean, transactions, height, check):
+    def get_tx_signatures(self, elementsd, transactions, height, check):
         try:
             signatures = []
             if not check or self.check_reissuance(transactions, height):
@@ -239,7 +239,7 @@ class Inflation():
                     inpt["scriptPubKey"] = self.scriptpk
                     inpt["redeemScript"] = self.script
                     inpts.append(inpt)
-                    signedtx = ocean.signrawtransaction(tx["hex"],inpts,self.riprivk)
+                    signedtx = elementsd.signrawtransaction(tx["hex"],inpts,self.riprivk)
                     sig = ""
                     scriptsig = signedtx["errors"][0]["scriptSig"]
                     ln = int(scriptsig[2:4],16)
@@ -286,11 +286,11 @@ class Inflation():
             self.logger.warning("failed signature combination: {}".format(e))
             return None
 
-    def send_reissuance_txs(self, ocean, transactions):
+    def send_reissuance_txs(self, elementsd, transactions):
         try:
             txids = []
             for tx in transactions:
-                txid = ocean.sendrawtransaction(tx["hex"])
+                txid = elementsd.sendrawtransaction(tx["hex"])
                 txids.append(txid)
             return txids
         except Exception as e:

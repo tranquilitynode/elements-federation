@@ -12,11 +12,11 @@ from pdb import set_trace
 from .test_framework.authproxy import AuthServiceProxy, JSONRPCException
 from .blocksigning import BlockSigning
 from .hsm import HsmPkcs11
-from .connectivity import getoceand, loadConfig
+from .connectivity import getelementsd, loadConfig
 
-NUM_OF_NODES_DEFAULT = 5
-NUM_OF_SIGS_DEFAULT = 3
-MESSENGER_TYPE_DEFAULT = "kafka"
+NUM_OF_NODES_DEFAULT = 9
+NUM_OF_SIGS_DEFAULT = 6
+MESSENGER_TYPE_DEFAULT = "zmq"
 IN_RATE = 0
 IN_PERIOD = 0
 IN_ADDRESS = ""
@@ -25,7 +25,7 @@ PRVKEY = ""
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--rpconnect', required=True, type=str, help="Client RPC host")
+    parser.add_argument('--rpcconnect', required=True, type=str, help="Client RPC host")
     parser.add_argument('--rpcport', required=True, type=str, help="Client RPC port")
     parser.add_argument('--rpcuser', required=True, type=str, help="RPC username for client")
     parser.add_argument('--rpcpassword', required=True, type=str, help="RPC password for client")
@@ -55,7 +55,7 @@ def main():
     conf["rpcuser"] = args.rpcuser
     conf["rpcpassword"] = args.rpcpassword
     conf["rpcport"] = args.rpcport
-    conf["rpcconnect"] = args.rpconnect
+    conf["rpcconnect"] = args.rpcconnect
     conf["id"] = args.id
     conf["msgtype"] = args.msgtype
     conf["nsigs"] = NUM_OF_SIGS_DEFAULT

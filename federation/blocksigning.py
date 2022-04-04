@@ -6,10 +6,11 @@ from hashlib import sha256 as _sha256
 from .daemon import DaemonThread
 from .test_framework.authproxy import JSONRPCException
 from .messenger_factory import MessengerFactory
-from .connectivity import getoceand
+from .connectivity import getelementsd
 from .inflation import Inflation
 
 BLOCK_TIME_DEFAULT = 60
+REDEEM_SCRIPT = '52210334089bcc4929bffcd19ae8b5324f93134a52b38cc59186e0d2ad7b07d18b5b63210325c0c76b8f93c47421e5a9a679d7f117a70f1654f6355ca3cd7c8178b03a13f4210365c70bea6ef7e02a33adb123ed13531d5caf5783caa2970eb5c6e43df61a4ebf53ae' # This is the blocksignscript's redeemscript aka block witnessscript. Unique to each network.
 
 def round_time(period, time):
     time_mod = time % period
@@ -23,7 +24,7 @@ class BlockSigning(DaemonThread):
     def __init__(self, conf, nodes, in_rate, in_period, in_address, script, signer=None):
         super().__init__()
         self.conf = conf
-        self.ocean = getoceand(self.conf)
+        self.elementsd = getelementsd(self.conf)
         self.default_interval = BLOCK_TIME_DEFAULT if "blocktime" not in conf else conf["blocktime"]
         self.catchup_interval = self.default_interval // 2
         self.interval = self.default_interval
@@ -38,7 +39,7 @@ class BlockSigning(DaemonThread):
 
         self.inflation = None
         if in_rate > 0:
-            self.inflation = Inflation(self.total, self.my_id, self.ocean, self.default_interval,\
+            self.inflation = Inflation(self.total, self.my_id, self.elementsd, self.default_interval,\
                 in_rate, in_period, in_address, script, conf["reissuanceprivkey"])
 
     def set_init_block_time(self):
@@ -108,7 +109,7 @@ class BlockSigning(DaemonThread):
 
                 # Inflation only, check to see if there are any reissuance transactions to sign
                 if height > 0 and self.inflation is not None:
-                    txsigs = self.inflation.get_tx_sigs(self.ocean, height, new_block)
+                    txsigs = self.inflation.get_tx_sigs(self.elementsd, height, new_block)
                     if txsigs is not None:
                         sig["txsigs"] = txsigs
                         sig["id"] = self.my_id
@@ -130,7 +131,7 @@ class BlockSigning(DaemonThread):
                 #if reissuance step, create raw reissuance transactions
                 if height > 0 and self.inflation is not None:
                     try:
-                        txs = self.inflation.create_txs(self.ocean, height)
+                        txs = self.inflation.create_txs(self.elementsd, height)
                         if txs is not None:
                             block["txs"] = txs
                     except Exception as e:
@@ -150,12 +151,12 @@ class BlockSigning(DaemonThread):
                     continue
 
                 if self.inflation is not None and "txs" in block and block["txs"] is not None:
-                    if not self.inflation.send_txs(self.ocean, height, block, sigs):
+                    if not self.inflation.send_txs(self.elementsd, height, block, sigs):
                         continue
 
                 blocksigs = []
                 for sig in sigs:
-                    blocksigs.append(sig["blocksig"])
+                    blocksigs.append(sig["blocksig"][0])
                 self.generate_signed_block(block["blockhex"], blocksigs)
 
     def rpc_retry(self, rpc_func, *args):
@@ -164,27 +165,27 @@ class BlockSigning(DaemonThread):
                 return rpc_func(*args)
             except Exception as e:
                 self.logger.warning("{}\nReconnecting to client...".format(e))
-                self.ocean = getoceand(self.conf)
+                self.elementsd = getelementsd(self.conf)
         self.logger.error("Failed reconnecting to client")
         self.stop()
 
     def get_blockcount(self):
-        return self.rpc_retry(self.ocean.getblockcount)
+        return self.rpc_retry(self.elementsd.getblockcount)
 
     def get_newblockhex(self):
-        return self.rpc_retry(self.ocean.getnewblockhex)
+        return self.rpc_retry(self.elementsd.getnewblockhex)
 
     def get_blockhash(self, height):
-        return self.rpc_retry(self.ocean.getblockhash, height)
+        return self.rpc_retry(self.elementsd.getblockhash, height)
 
     def get_blockheader(self, hash):
-        return self.rpc_retry(self.ocean.getblockheader, hash)
+        return self.rpc_retry(self.elementsd.getblockheader, hash)
 
     def get_blocksig(self, block):
         try:
             # hsm block signer
             if self.signer is not None:
-                # get block header bytes excluding last byte (Ocean SER_HASH BlockHeader)
+                # get block header bytes excluding last byte (Elements SER_HASH BlockHeader)
                 block_header_bytes = get_header(bytes.fromhex(block))
                 block_header_for_hash_bytes = block_header_bytes[:len(block_header_bytes)-1]
 
@@ -194,35 +195,35 @@ class BlockSigning(DaemonThread):
                 # turn sig into scriptsig format
                 return "00{:02x}{}".format(len(sig), sig.hex())
 
-            return self.rpc_retry(self.ocean.signblock, block)
+            return self.rpc_retry(self.elementsd.signblock, block, REDEEM_SCRIPT)
         except Exception as e:
             self.logger.warning("{}\ncould not get block sig".format(e))
             return None
 
     def generate_signed_block(self, block, sigs):
         try:
-            sigs.append(self.get_blocksig(block))
-            blockresult = self.rpc_retry(self.ocean.combineblocksigs, block, sigs)
+            sigs.append(self.get_blocksig(block)[0])
+            blockresult = self.rpc_retry(self.elementsd.combineblocksigs, block, sigs, REDEEM_SCRIPT)
             signedblock = blockresult["hex"]
             if blockresult["complete"] == True:
-                self.rpc_retry(self.ocean.submitblock, signedblock)
+                self.rpc_retry(self.elementsd.submitblock, signedblock)
                 self.logger.info("node {} - submitted block {}".format(self.my_id, signedblock))
             else:
                 self.logger.info("node {} - block not submitted".format(self.my_id))
         except Exception as e:
             self.logger.warning("{}\ncould not generate signed block".format(e))
 
-OCEAN_BASE_HEADER_SIZE = 172
+ELEMENTS_BASE_HEADER_SIZE = 172
 
 def header_hash(block):
-    challenge_size = block[OCEAN_BASE_HEADER_SIZE]
-    header_without_proof = block[:OCEAN_BASE_HEADER_SIZE+1+challenge_size]
+    challenge_size = block[ELEMENTS_BASE_HEADER_SIZE]
+    header_without_proof = block[:ELEMENTS_BASE_HEADER_SIZE+1+challenge_size]
     return double_sha256(header_without_proof)
 
 def get_header(block):
-    challenge_size = block[OCEAN_BASE_HEADER_SIZE]
-    proof_size = block[OCEAN_BASE_HEADER_SIZE+1+challenge_size]
-    return block[:OCEAN_BASE_HEADER_SIZE+1+challenge_size+1+proof_size]
+    challenge_size = block[ELEMENTS_BASE_HEADER_SIZE]
+    proof_size = block[ELEMENTS_BASE_HEADER_SIZE+1+challenge_size]
+    return block[:ELEMENTS_BASE_HEADER_SIZE+1+challenge_size+1+proof_size]
 
 def sha256(x):
     return _sha256(x).digest()
