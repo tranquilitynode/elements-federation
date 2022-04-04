@@ -7,11 +7,11 @@ import subprocess
 import shutil
 from .test_framework.authproxy import AuthServiceProxy, JSONRPCException
 
-def startoceand(oceanpath, datadir, conf, args=""):
-    subprocess.Popen((oceanpath+"  -datadir="+datadir+" "+args).split(), stdout=subprocess.PIPE)
-    return getoceand(conf)
+def startelementsd(elementsdpath, datadir, conf, args=""):
+    subprocess.Popen((elementsdpath+"  -datadir="+datadir+" "+args).split(), stdout=subprocess.PIPE)
+    return getelementsd(conf)
 
-def getoceand(conf):
+def getelementsd(conf):
     if "rpcconnect" in conf:
         rpcconnect = conf["rpcconnect"]
     else:

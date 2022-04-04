@@ -2,12 +2,11 @@
 from setuptools import setup, find_packages
 import os
 
-setup(name='federation',
+setup(name='elements-federation',
       version='0.1',
       description='Federation Node Daemon',
-      author='CommerceBlock',
-      author_email='nikolaos@commerceblock.com',
-      url='http://github.com/commerceblock/federation',
+      author='Originally CommerceBlock, modified by Tranquility Node Ltd',
+      url='http://github.com/tranquilitynode/elements-federation',
       packages=find_packages(),
       scripts=[],
       include_package_data=True,

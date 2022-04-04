@@ -14,7 +14,7 @@ from federation.blocksigning import BlockSigning
 from federation.multisig import MultiSig
 from .client import Client
 
-OCEAN_PATH = "oceand"
+ELEMENTSD_PATH = "elementsd"
 DEFAULT_ENABLE_LOGGING = False
 DEFAULT_GENERATE_KEYS = False
 DEFAULT_RETAIN_DAEMONS = False
@@ -105,39 +105,39 @@ def main():
     extra_args =  "{} {} {} {} {}".\
         format(signblockarg, coinbasearg, issuecontrolarg, coindestarg, issuancedestarg)
 
-    # INIT THE OCEAN MAIN NODES
-    ocean_conf = []
+    # INIT THE ELEMENTS MAIN NODES
+    elementsd_conf = []
     tmpdir="/tmp/"+''.join(random.choice('0123456789ABCDEF') for i in range(5))
     for i in range(0, num_of_nodes):
         datadir = tmpdir + "/main" + str(i)
         os.makedirs(datadir)
-        os.makedirs(datadir + "/terms-and-conditions/ocean_test")
+        os.makedirs(datadir + "/terms-and-conditions/elementsd_test")
 
-        confdir=os.path.join(os.path.dirname(__file__), "main"+str(i)+"/ocean.conf")
-        shutil.copyfile(confdir, datadir+"/ocean.conf")
-        shutil.copyfile(os.path.join(os.path.dirname(__file__), 'latest.txt'), datadir + "/terms-and-conditions/ocean_test/latest.txt")
+        confdir=os.path.join(os.path.dirname(__file__), "main"+str(i)+"/elementsd.conf")
+        shutil.copyfile(confdir, datadir+"/elementsd.conf")
+        shutil.copyfile(os.path.join(os.path.dirname(__file__), 'latest.txt'), datadir + "/terms-and-conditions/elementsd_test/latest.txt")
         mainconf = connectivity.loadConfig(confdir)
 
         logger.info("Starting node {} with datadir {} and confdir {}".format(i, datadir, confdir))
-        e = connectivity.startoceand(OCEAN_PATH, datadir, mainconf, extra_args)
+        e = connectivity.startelementsd(ELEMENTSD_PATH, datadir, mainconf, extra_args)
         time.sleep(4)
-        ocean_conf.append((mainconf, e))
+        elementsd_conf.append((mainconf, e))
         e.importprivkey(keys[i])
-        ocean_conf[i][0]["reissuanceprivkey"] = keys[i]
-        ocean_conf[i][0]["id"] = i
-        ocean_conf[i][0]["msgtype"] = MESSENGER_TYPE
-        ocean_conf[i][0]["blocktime"] = block_time
-        ocean_conf[i][0]["nsigs"] = num_of_sigs
+        elementsd_conf[i][0]["reissuanceprivkey"] = keys[i]
+        elementsd_conf[i][0]["id"] = i
+        elementsd_conf[i][0]["msgtype"] = MESSENGER_TYPE
+        elementsd_conf[i][0]["blocktime"] = block_time
+        elementsd_conf[i][0]["nsigs"] = num_of_sigs
         time.sleep(1)
 
     # EXPLORER FULL NODE
     explorer_datadir=tmpdir+"/explorer"
     os.makedirs(explorer_datadir)
-    os.makedirs(explorer_datadir + "/terms-and-conditions/ocean_test")
-    shutil.copyfile(os.path.join(os.path.dirname(__file__), 'explorer/ocean.conf'), explorer_datadir+"/ocean.conf")
-    shutil.copyfile(os.path.join(os.path.dirname(__file__), 'latest.txt'), explorer_datadir + "/terms-and-conditions/ocean_test/latest.txt")
-    explconf = connectivity.loadConfig(os.path.join(os.path.dirname(__file__), 'explorer/ocean.conf'))
-    ee = connectivity.startoceand(OCEAN_PATH, explorer_datadir, explconf, extra_args)
+    os.makedirs(explorer_datadir + "/terms-and-conditions/elementsd_test")
+    shutil.copyfile(os.path.join(os.path.dirname(__file__), 'explorer/elementsd.conf'), explorer_datadir+"/elementsd.conf")
+    shutil.copyfile(os.path.join(os.path.dirname(__file__), 'latest.txt'), explorer_datadir + "/terms-and-conditions/elementsd_test/latest.txt")
+    explconf = connectivity.loadConfig(os.path.join(os.path.dirname(__file__), 'explorer/elementsd.conf'))
+    ee = connectivity.startelementsd(ELEMENTS_PATH, explorer_datadir, explconf, extra_args)
     time.sleep(2)
 
     # For ZMQ testing host of nodes is required to setup the sockets
@@ -150,11 +150,11 @@ def main():
 
     node_signers = []
     for i in range(len(node_ids)):
-        node = BlockSigning(ocean_conf[i][0], node_ids, in_rate, in_period, in_address, script)
+        node = BlockSigning(elementsd_conf[i][0], node_ids, in_rate, in_period, in_address, script)
         node_signers.append(node)
         node.start()
 
-    client = Client(OCEAN_PATH, num_of_clients, extra_args, script, args.inflation_txs, coindestkey)
+    client = Client(ELEMENTSD_PATH, num_of_clients, extra_args, script, args.inflation_txs, coindestkey)
     client.start()
 
     try:
@@ -170,7 +170,7 @@ def main():
                     # use diff port as socket might not have cleared yet
                     node_ids[0] = '127.0.0.1:1600' if catch_up_switch else '127.0.0.1:1500'
                     catch_up_switch = not catch_up_switch
-                    node = BlockSigning(ocean_conf[0][0], node_ids, in_rate, in_period, in_address, script)
+                    node = BlockSigning(elementsd_conf[0][0], node_ids, in_rate, in_period, in_address, script)
                     node_signers[0] = node
                     node.start()
                     time.sleep(1)
@@ -195,8 +195,8 @@ def main():
 
             shutil.rmtree(tmpdir)
 
-            for ocean in ocean_conf:
-                ocean[1].stop()
+            for elementsd in elementsd_conf:
+                elementsd[1].stop()
             ee.stop()
 
 if __name__ == "__main__":
