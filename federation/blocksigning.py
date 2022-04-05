@@ -156,7 +156,7 @@ class BlockSigning(DaemonThread):
 
                 blocksigs = []
                 for sig in sigs:
-                    blocksigs.append(sig["blocksig"][0])
+                    blocksigs = blocksigs + sig["blocksig"]
                 self.generate_signed_block(block["blockhex"], blocksigs)
 
     def rpc_retry(self, rpc_func, *args):
@@ -202,7 +202,7 @@ class BlockSigning(DaemonThread):
 
     def generate_signed_block(self, block, sigs):
         try:
-            sigs.append(self.get_blocksig(block)[0])
+            sigs = sigs + self.get_blocksig(block)
             blockresult = self.rpc_retry(self.elementsd.combineblocksigs, block, sigs, REDEEM_SCRIPT)
             signedblock = blockresult["hex"]
             if blockresult["complete"] == True:
