@@ -10,7 +10,8 @@ from .connectivity import getelementsd
 from .inflation import Inflation
 
 BLOCK_TIME_DEFAULT = 60
-REDEEM_SCRIPT = '52210334089bcc4929bffcd19ae8b5324f93134a52b38cc59186e0d2ad7b07d18b5b63210325c0c76b8f93c47421e5a9a679d7f117a70f1654f6355ca3cd7c8178b03a13f4210365c70bea6ef7e02a33adb123ed13531d5caf5783caa2970eb5c6e43df61a4ebf53ae' # This is the blocksignscript's redeemscript aka block witnessscript. Unique to each network.
+REDEEM_SCRIPT = '' # This is the blocksignscript's redeemscript aka block witnessscript. Unique to each network.
+WALLET_PASS_PHRASE = ''
 
 def round_time(period, time):
     time_mod = time % period
@@ -26,6 +27,8 @@ class BlockSigning(DaemonThread):
         self.conf = conf
         self.elementsd = getelementsd(self.conf)
         self.default_interval = BLOCK_TIME_DEFAULT if "blocktime" not in conf else conf["blocktime"]
+        self.default_redeem_script = REDEEM_SCRIPT if "redeemscript" not in conf else conf["redeemscript"]
+        self.wallet_pass_phrase = WALLET_PASS_PHRASE if "walletpassphrase" not in conf else conf["walletpassphrase"]
         self.catchup_interval = self.default_interval // 2
         self.interval = self.default_interval
         self.init_block_time = 0
@@ -195,7 +198,8 @@ class BlockSigning(DaemonThread):
                 # turn sig into scriptsig format
                 return "00{:02x}{}".format(len(sig), sig.hex())
 
-            return self.rpc_retry(self.elementsd.signblock, block, REDEEM_SCRIPT)
+                self.rpc_retry(self.elementsd.walletpassphrase, self.wallet_pass_phrase, 2)
+            return self.rpc_retry(self.elementsd.signblock, block, self.default_redeem_script)
         except Exception as e:
             self.logger.warning("{}\ncould not get block sig".format(e))
             return None
@@ -203,7 +207,7 @@ class BlockSigning(DaemonThread):
     def generate_signed_block(self, block, sigs):
         try:
             sigs = sigs + self.get_blocksig(block)
-            blockresult = self.rpc_retry(self.elementsd.combineblocksigs, block, sigs, REDEEM_SCRIPT)
+            blockresult = self.rpc_retry(self.elementsd.combineblocksigs, block, sigs, self.default_redeem_script)
             signedblock = blockresult["hex"]
             if blockresult["complete"] == True:
                 self.rpc_retry(self.elementsd.submitblock, signedblock)

@@ -30,9 +30,15 @@ def parse_args():
     parser.add_argument('--rpcuser', required=True, type=str, help="RPC username for client")
     parser.add_argument('--rpcpassword', required=True, type=str, help="RPC password for client")
     parser.add_argument('--id', required=True, type=int, help="Federation node id")
-
     parser.add_argument('--msgtype', default=MESSENGER_TYPE_DEFAULT, type=str, help="Messenger type protocol used by federation. 'Kafka' and 'zmq' values supported")
     parser.add_argument('--nodes', default="", type=str, help="Nodes for zmq protocol. Example use 'node0:1503,node1:1502'")
+
+    parser.add_argument('--walletpassphrase', default="", type=str, help="Wallet pass phrase, only required if the nodes wallet is encrypted.")
+
+    parser.add_argument('--nnodes', default=NUM_OF_NODES_DEFAULT, type=int, help="The number of block signing members of the federation, the n parameter in an m-of-n block signing script.")
+    parser.add_argument('--nsigs', default=NUM_OF_SIGS_DEFAULT, type=int, help="The number of signatures required for a valid block, the m parameter in an m-of-n block signing script.")
+    parser.add_argument('--blocktime', default=60, type=int, help="Target time between blocks, in seconds (default: 60).")
+    parser.add_argument('--redeemscript', required=True, type=str, help="Block signing script.")
 
     parser.add_argument('--inflationrate', default=IN_RATE, type=float, help="Inflation rate. Example 0.0101010101")
     parser.add_argument('--inflationperiod', default=IN_PERIOD, type=int, help="Inflation period (in blocks)")
@@ -58,7 +64,11 @@ def main():
     conf["rpcconnect"] = args.rpcconnect
     conf["id"] = args.id
     conf["msgtype"] = args.msgtype
-    conf["nsigs"] = NUM_OF_SIGS_DEFAULT
+    conf["walletpassphrase"] = args.walletpassphrase
+    conf["nsigs"] = args.nsigs
+
+    conf["blocktime"] = args.blocktime
+    conf["redeemscript"] = args.redeemscript
 
     inrate = args.inflationrate
     inprd = args.inflationperiod
@@ -72,7 +82,7 @@ def main():
         nodes = args.nodes.split(',')
     else:
         # Maintain old behavior for Kafka
-        nodes = ['']*NUM_OF_NODES_DEFAULT
+        nodes = ['']*args.nnodes
 
     signer = None
     if args.hsm:
