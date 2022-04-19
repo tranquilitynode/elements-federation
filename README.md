@@ -7,7 +7,7 @@ The client used by the federation nodes of an Elements network performing block 
 2. `python3 setup.py build && python3 setup.py install`
 3. For the demo run `./run_demo` or `python3 -m demo`
 4. For the federation run `./run_federation` or `python3 -m federation` and provide the following arguments:
-`--rpcconnect $HOST --rpcport $PORT --rpcuser $USER --rpcpass $PASS --id $NODE_ID --msgtype $MSG_TYPE --nodes $NODES_LIST`
+`--rpcconnect $HOST --rpcport $PORT --rpcuser $USER --rpcpass $PASS --walletpassphrase $PASSPHRASE --nnodes $NNODES --nsigs $NSIGS --blocktime $BLOCKTIME --redeemscript $REDEEMSCRIPT --id $NODE_ID --msgtype $MSG_TYPE --nodes $NODES_LIST`
 
 Federation arguments:
 
@@ -16,6 +16,11 @@ Federation arguments:
 - `--rpcuser`: rpc username
 - `--rpcpassword`: rpc password
 - `--id`: federation node id
+- `--walletpassphrase`: Wallet pass phrase, used if the node's wallet is encrypted
+- `--nnodes`: The number of block signing members of the federation, the n parameter in an m-of-n block signing script
+- `--nsigs`: The number of signatures required for a valid block, the m parameter in an m-of-n block signing script
+- `--blocktime`: Target time between blocks, in seconds (default: 60)
+- `--redeemscript`: Block signing script
 - `--msg_type`: Messenger type used. Possible values: 'kafka', 'zmq' (optional, default='kafka')
 - `--nodes`: List of node ip/domain names for zmq only
 - `--hsm`: Flag to enable signing with HSM
@@ -27,8 +32,8 @@ Federation arguments:
 
 Example use:
 
-- zmq: `python3 -m federation --rpcconnect 127.0.0.1 --rpcport 18443 --rpcuser user --rpcpass pass --id 1 --msgtype zmq --nodes “node0:1503,node1:1502”`
-- kafka: `python3 -m federation --rpcconnect 127.0.0.1 --rpcport 18443 --rpcuser user --rpcpass pass --id 1` (check federation.py - defaults to 5 nodes)
+- zmq: `python3 -m federation --rpcconnect 127.0.0.1 --rpcport 18443 --rpcuser user --rpcpass pass --walletpassphrase passphrase --nnodes 3 --nsigs 2 --blocktime 60 --redeemscript "2b4c...e97f" --id 1 --msgtype zmq --nodes “node0:1503,node1:1502”`
+- kafka: `python3 -m federation --rpcconnect 127.0.0.1 --rpcport 18443 --rpcuser user --rpcpass pass --walletpassphrase passphrase --nnodes 3 --nsigs 2 --blocktime 60 --redeemscript "2b4c...e97f" --id 1` (check federation.py - defaults to 5 nodes)
 
 ### Using HSMs
 
@@ -48,7 +53,7 @@ To build the federation container with hsm signing run:
 
 Inside this container federation can be initiated by:
 
-`python3 -u -m federation --rpcconnect signing1 --rpcport 18886 --rpcuser username1 --rpcpass password1 --id 1 --msgtype zmq --nodes "federation0:6666,federation1:7777,federation2:8888" --hsm 1`
+`python3 -u -m federation --rpcconnect signing1 --rpcport 18886 --rpcuser username1 --rpcpass password1 --nnodes 3 --nsigs 2 --blocktime 60 --redeemscript "2b4c...e97f" --id 1 --msgtype zmq --nodes "federation0:6666,federation1:7777,federation2:8888" --hsm 1`
 
 ### Inflating assets
 
