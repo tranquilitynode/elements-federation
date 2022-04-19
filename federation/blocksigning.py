@@ -198,7 +198,7 @@ class BlockSigning(DaemonThread):
                 # turn sig into scriptsig format
                 return "00{:02x}{}".format(len(sig), sig.hex())
 
-                self.rpc_retry(self.elementsd.walletpassphrase, self.wallet_pass_phrase, 2)
+            self.rpc_retry(self.elementsd.walletpassphrase, self.wallet_pass_phrase, 2)
             return self.rpc_retry(self.elementsd.signblock, block, self.default_redeem_script)
         except Exception as e:
             self.logger.warning("{}\ncould not get block sig".format(e))
