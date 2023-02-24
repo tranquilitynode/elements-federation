@@ -2,6 +2,7 @@
 import zmq
 import json
 import logging
+import socket
 from .messenger import Messenger
 
 TOPIC_NEW_BLOCK = '10'
@@ -113,3 +114,17 @@ class ZmqMessenger(Messenger):
             host, port = node.split(':', 1)
             if i != self.my_id:
                 self.consumers.append(ZmqConsumer(host, int(port)))
+
+                # Test the given consumer node for a response and log the result
+                s = socket.socket()
+                try:
+                    s.connect((host, int(port)))
+                except Exception as e:
+                    self.logger.info("    Re-registering node %s at %s:%d = Failed: %s", i, host, int(port), e)
+                else:
+                    self.logger.info("    Re-registering node %s at %s:%d = Succeeded", i, host, int(port))
+                finally:
+                    s.close()
+
+            else:
+                self.logger.info("    Skipping self: node %s at %s:%d", i, host, int(port))

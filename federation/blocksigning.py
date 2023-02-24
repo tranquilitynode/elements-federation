@@ -62,8 +62,11 @@ class BlockSigning(DaemonThread):
         height_expected = (round_time(self.default_interval, int(time())) - self.init_block_time)\
                          // self.default_interval
         if height_expected > height:
-            self.logger.warning("block height {} expected {}".format(height, height_expected))
+            self.logger.warning("Current chain height {} expected {}".format(height, height_expected))
             return True
+        else:
+            self.logger.info("Current chain height: {}".format(height))
+
         return False
 
     def run(self):
@@ -76,21 +79,21 @@ class BlockSigning(DaemonThread):
             if height == None:
                 continue
             elif height > 0 and not self.set_init_block_time():
-                self.logger.error("could not set init block time")
+                self.logger.error("Could not set init block time")
                 continue
 
             if self.is_catchup_needed(height):
                 if self.inflation is not None and self.inflation.is_inflation_step(height):
-                    self.logger.info("catch mode skipped due to inflation step")
+                    self.logger.info("Catch up mode skipped due to inflation step")
                 else:
                     self.interval = self.catchup_interval
-                    self.logger.info("catch mode enabled")
+                    self.logger.info("Catch up mode enabled")
             else:
                 self.interval = self.default_interval
 
             if self.my_id != int(step):
                 # NOT OUR TURN - GET BLOCK AND SEND SIGNATURE ONLY
-                self.logger.info("node {} - consumer".format(self.my_id))
+                self.logger.info("Node {} - consumer".format(self.my_id))
 
                 new_block = None
                 while new_block == None:
@@ -99,16 +102,20 @@ class BlockSigning(DaemonThread):
                     new_block = self.messenger.consume_block(height)
 
                 if new_block == None:
-                    self.logger.warning("could not get latest suggested block")
+                    self.logger.warning("Failed to receive expected block proposal")
                     self.messenger.reconnect()
                     continue
+                else:
+                    self.logger.info("Received block proposal: %s", new_block)
 
                 sig = {}
                 sig["blocksig"] = self.get_blocksig(new_block["blockhex"])
                 if sig["blocksig"] == None:
-                    self.logger.error("could not sign new block")
+                    self.logger.error("Failed to sign block proposal")
                     self.stop()
                     continue
+                else:
+                    self.logger.info("Signed block proposal: %s", sig["blocksig"])
 
                 # Inflation only, check to see if there are any reissuance transactions to sign
                 if height > 0 and self.inflation is not None:
@@ -118,18 +125,20 @@ class BlockSigning(DaemonThread):
                         sig["id"] = self.my_id
 
                 self.messenger.produce_sig(sig, height + 1)
+                self.logger.info("Sent block sig: %s", sig)
                 elapsed_time = time() - start_time
                 sleep(self.interval / 2 - (elapsed_time if elapsed_time < self.interval / 2 else 0))
             else:
                 # OUR TURN - FIRST SEND NEW BLOCK HEX
-                self.logger.info("blockcount:{}".format(height))
-                self.logger.info("node {} - producer".format(self.my_id))
+                self.logger.info("Node {} - producer".format(self.my_id))
 
                 block = {}
                 block["blockhex"] = self.get_newblockhex()
                 if block["blockhex"] == None:
-                    self.logger.error("could not generate new block hex")
+                    self.logger.error("Failed to generate block proposal")
                     continue
+                else:
+                    self.logger.info("Generated block proposal: %s", block["blockhex"])
 
                 #if reissuance step, create raw reissuance transactions
                 if height > 0 and self.inflation is not None:
@@ -143,15 +152,20 @@ class BlockSigning(DaemonThread):
                         continue
 
                 self.messenger.produce_block(block, height + 1)
+                self.logger.info("Sent block proposal: %s", block)
                 elapsed_time = time() - start_time
                 sleep(self.interval / 2 - (elapsed_time if elapsed_time < self.interval / 2 else 0))
 
                 # THEN COLLECT SIGNATURES AND SUBMIT BLOCK
                 sigs = self.messenger.consume_sigs(height)
+                self.logger.info("Received %s sigs", len(sigs))
                 if len(sigs) < self.nsigs - 1:
-                    self.logger.warning("could not get new block sigs")
+                    self.logger.warning("Failed to receive at least %s sigs", self.nsigs - 1)
                     self.messenger.reconnect()
                     continue
+                else:
+                    for sig in sigs:
+                        self.logger.info("Received block sig: %s", sig)
 
                 if self.inflation is not None and "txs" in block and block["txs"] is not None:
                     if not self.inflation.send_txs(self.elementsd, height, block, sigs):
@@ -163,13 +177,21 @@ class BlockSigning(DaemonThread):
                 self.generate_signed_block(block["blockhex"], blocksigs)
 
     def rpc_retry(self, rpc_func, *args):
+        # The following commented block is work in progress to remove the need to self.stop() after a limited number of retrys
+        #while True:
+        #    try:
+        #        return rpc_func(*args)
+        #    except Exception as e:
+        #        self.logger.warning("Retrying RPC call, following elementsd error: {}".format(e))
+        #        self.elementsd = getelementsd(self.conf)
+        #        sleep(10) # Pause for 10 seconds between retries, so as not to cause a flood
         for i in range(5):
             try:
                 return rpc_func(*args)
             except Exception as e:
-                self.logger.warning("{}\nReconnecting to client...".format(e))
+                self.logger.warning("{}\nReconnecting to elementsd rpc server...".format(e))
                 self.elementsd = getelementsd(self.conf)
-        self.logger.error("Failed reconnecting to client")
+        self.logger.error("Failed reconnecting to elementsd rpc server")
         self.stop()
 
     def get_blockcount(self):
@@ -201,21 +223,23 @@ class BlockSigning(DaemonThread):
             self.rpc_retry(self.elementsd.walletpassphrase, self.wallet_pass_phrase, 2)
             return self.rpc_retry(self.elementsd.signblock, block, self.default_redeem_script)
         except Exception as e:
-            self.logger.warning("{}\ncould not get block sig".format(e))
+            self.logger.warning("{}\nFfailed to sign block proposal".format(e))
             return None
 
     def generate_signed_block(self, block, sigs):
         try:
-            sigs = sigs + self.get_blocksig(block)
+            sig = self.get_blocksig(block)
+            sigs = sigs + sig
+            self.logger.info("Signed block proposal: %s", sig)
             blockresult = self.rpc_retry(self.elementsd.combineblocksigs, block, sigs, self.default_redeem_script)
             signedblock = blockresult["hex"]
             if blockresult["complete"] == True:
                 self.rpc_retry(self.elementsd.submitblock, signedblock)
-                self.logger.info("node {} - submitted block {}".format(self.my_id, signedblock))
+                self.logger.info("Node {} - submitted block {}".format(self.my_id, signedblock))
             else:
-                self.logger.info("node {} - block not submitted".format(self.my_id))
+                self.logger.info("Node {} - failed to submit block".format(self.my_id))
         except Exception as e:
-            self.logger.warning("{}\ncould not generate signed block".format(e))
+            self.logger.warning("{}\nFailed to generate signed block".format(e))
 
 ELEMENTS_BASE_HEADER_SIZE = 172
 

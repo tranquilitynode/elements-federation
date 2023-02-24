@@ -5,8 +5,7 @@ The client used by the federation nodes of an Elements network performing block 
 ## Instructions
 1. `pip3 install -r requirements.txt`
 2. `python3 setup.py build && python3 setup.py install`
-3. For the demo run `./run_demo` or `python3 -m demo`
-4. For the federation run `./run_federation` or `python3 -m federation` and provide the following arguments:
+3. `./run_federation` or `python3 -m federation` and provide the following arguments:
 `--rpcconnect $HOST --rpcport $PORT --rpcuser $USER --rpcpass $PASS --walletpassphrase $PASSPHRASE --nnodes $NNODES --nsigs $NSIGS --blocktime $BLOCKTIME --redeemscript $REDEEMSCRIPT --id $NODE_ID --msgtype $MSG_TYPE --nodes $NODES_LIST`
 
 Federation arguments:
