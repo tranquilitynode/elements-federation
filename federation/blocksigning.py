@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import sys
 import logging
+import json
 from time import sleep, time
 from hashlib import sha256 as _sha256
 from .daemon import DaemonThread
@@ -194,10 +195,17 @@ class BlockSigning(DaemonThread):
         self.logger.error("Failed reconnecting to elementsd rpc server")
         self.stop()
 
+    def get_IBDstatus(self):
+        json_dict = self.rpc_retry(self.elementsd.getblockchaininfo)
+        return json_dict['initialblockdownload']
+
     def get_blockcount(self):
         return self.rpc_retry(self.elementsd.getblockcount)
 
     def get_newblockhex(self):
+        while self.get_IBDstatus():
+            self.logger.warning("elementsd in IBD mode, retrying...")
+            sleep(1)
         return self.rpc_retry(self.elementsd.getnewblockhex)
 
     def get_blockhash(self, height):
@@ -220,10 +228,13 @@ class BlockSigning(DaemonThread):
                 # turn sig into scriptsig format
                 return "00{:02x}{}".format(len(sig), sig.hex())
 
+            while self.get_IBDstatus():
+                self.logger.warning("elementsd in IBD mode, retrying...")
+                sleep(1)
             self.rpc_retry(self.elementsd.walletpassphrase, self.wallet_pass_phrase, 2)
             return self.rpc_retry(self.elementsd.signblock, block, self.default_redeem_script)
         except Exception as e:
-            self.logger.warning("{}\nFfailed to sign block proposal".format(e))
+            self.logger.warning("{}\nFailed to sign block proposal".format(e))
             return None
 
     def generate_signed_block(self, block, sigs):
